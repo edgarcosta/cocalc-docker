@@ -1,5 +1,5 @@
 cocalc-data=/scratch/cocalc-data
-common_options=--name=cocalc -d -p 443:443  -v $(cocalc-data)/projects:/projects  -v /opt/magma:/opt/magma:ro  -v /etc/letsencrypt/:/etc/letsencrypt/:ro --cap-add=NET_ADMIN -P cocalc
+common_options=--name=cocalc -p 443:443  -v $(cocalc-data)/projects:/projects  -v /opt/magma:/opt/magma:ro  -v /etc/letsencrypt/:/etc/letsencrypt/:ro --cap-add=NET_ADMIN -P cocalc
 build:
 	docker build -t cocalc .
 
@@ -17,7 +17,7 @@ light:
 	docker build -t cocalc-light -f Dockerfile-light .
 
 run:
-	docker run $(common_options)
+	docker run -d --restart unless-stopped $(common_options)
 
 test:
 	docker run --rm $(common_options)
