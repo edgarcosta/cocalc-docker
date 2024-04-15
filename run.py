@@ -143,18 +143,19 @@ def root_ssh_keys():
 
 def start_hub():
     log("start_hub")
-    kill("cocalc-hub-server")
+    kill("cocalc-hub-server --mode=multi-user")
     # NOTE: there's automatic logging to files that rotate as they get bigger...
     if NOSSL:
         target = "hub-docker-prod-nossl"
     else:
         target = "hub-docker-prod"
-    run(f"mkdir -p /var/log/hub && cd /cocalc/src/packages/hub && pnpm run {target} > /var/log/hub/out 2>/var/log/hub/err &")
+    run(f"mkdir -p /var/log/hub && cd /cocalc/src/packages/hub && source /usr/local/nvm/nvm.sh && pnpm run {target} > /var/log/hub/out 2>/var/log/hub/err &")
+    run("tail -F /var/log/hub/out /var/log/hub/err /var/log/hub/log &")
 
 def postgres_perms():
     log("postgres_perms: ensuring postgres directory perms are sufficiently restrictive"
         )
-    run(f"mkdir -p {DATA}/postgres && chown -R sage. {DATA}/postgres && chmod og-rwx -R {DATA}/postgres"
+    run(f"mkdir -p {DATA}/postgres && chown -R postgres. {DATA}/postgres && chmod og-rwx -R {DATA}/postgres"
         )
 
 
@@ -170,7 +171,7 @@ def start_postgres():
     if not os.path.exists(
             PGDATA):  # see comments in smc/src/dev/project/start_postgres.py
         log("start_postgres:", "create data directory ", PGDATA)
-        run("sudo -u sage /usr/lib/postgresql/14/bin/pg_ctl init -D '%s'" %
+        run("sudo -u postgres /usr/lib/postgresql/14/bin/pg_ctl init -D '%s'" %
             PGDATA)
         open(os.path.join(PGDATA, 'pg_hba.conf'),
              'w').write("local all all trust")
@@ -180,17 +181,17 @@ def start_postgres():
         open(conf, 'w').write(s)
         os.makedirs(PGHOST)
         postgres_perms()
-        run("sudo -u sage /usr/lib/postgresql/14/bin/postgres -D '%s' >%s/postgres.log 2>&1 &"
+        run("sudo -u postgres /usr/lib/postgresql/14/bin/postgres -D '%s' >%s/postgres.log 2>&1 &"
             % (PGDATA, PGDATA))
         time.sleep(5)
-        run("sudo -u sage /usr/lib/postgresql/14/bin/createuser -h '%s' -sE smc"
+        run("sudo -u postgres /usr/lib/postgresql/14/bin/createuser -h '%s' -sE smc"
             % PGHOST)
-        run("sudo -u sage kill %s" %
+        run("sudo -u postgres kill %s" %
             (open(os.path.join(PGDATA, 'postmaster.pid')).read().split()[0]))
         time.sleep(3)
     log("start_postgres:", "starting the server")
     os.system(
-        "sudo -u sage /usr/lib/postgresql/14/bin/postgres -D '%s' > /var/log/postgres.log 2>&1 &"
+        "sudo -u postgres /usr/lib/postgresql/14/bin/postgres -D '%s' > /var/log/postgres.log 2>&1 &"
         % PGDATA)
 
 
