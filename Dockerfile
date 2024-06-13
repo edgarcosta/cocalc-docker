@@ -67,6 +67,13 @@ RUN \
        psmisc \
        rsync \
        tidy \
+       nano \
+       alpine-pico \
+       parallel \
+       primesieve \
+       earlyoom \
+       macaulay2 \
+       libmpfr-dev \
        libxml2-dev \
        libxslt-dev \
        libfuse-dev
@@ -123,6 +130,8 @@ RUN \
        postgresql \
        lz4
 
+# so we have dig
+RUN apt-get install -y dnsutils
 
 # Install the R statistical software.  We do NOT use a custom repo, etc., as
 # suggested https://github.com/sagemathinc/cocalc-docker/pull/169/files because
@@ -143,6 +152,18 @@ RUN \
    apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y tachyon
 
+# install the latest pari-gp
+RUN \
+   wget https://pari.math.u-bordeaux.fr/pub/pari/unix/pari.tgz \
+   && tar xf pari.tgz \
+   && cd pari-* \
+   && MAKE="make -j$(cat /proc/cpuinfo | grep processor | wc -l)" ./Configure --prefix=/usr/local && make install
+
+# OLD
+# # Build and install Sage -- see https://github.com/sagemath/docker-images
+# COPY scripts/ /usr/sage-install-scripts/
+# RUN chmod -R a+rx /usr/sage-install-scripts/
+# NEW
 # I'm now pre-building sage for each version once and for all via
 #    https://github.com/sagemathinc/cocalc-compute-docker
 # NOTE: this copies from a multi-platform image, so it properly works
@@ -219,6 +240,28 @@ RUN mv "$HOME/.local/share/jupyter/kernels/julia"* "/usr/local/share/jupyter/ker
 
 # Also add Pluto and other VERY popular Julia packages system-wide.
 RUN echo 'using Pkg; Pkg.add("Pluto"); Pkg.add("Plots"); Pkg.add("Flux"); Pkg.add("Makie");' | JULIA_DEPOT_PATH=/opt/julia/local/share/julia JULIA_PKG=/opt/julia/local/share/julia julia
+# Nemo, Hecke, and Oscar (some math software).
+RUN echo 'using Pkg; Pkg.add("Nemo"); Pkg.add("Hecke"); Pkg.add("Oscar")' | JULIA_DEPOT_PATH=/opt/julia/local/share/julia JULIA_PKG=/opt/julia/local/share/julia julia
+# Distributions, Random, HomotopyContinuation
+RUN echo 'using Pkg; Pkg.add("Distributions"); Pkg.add("Random"); Pkg.add("HomotopyContinuation")' | JULIA_DEPOT_PATH=/opt/julia/local/share/julia JULIA_PKG=/opt/julia/local/share/julia julia
+
+
+
+# Install magma
+#
+RUN ln -s /opt/magma/current/magma /usr/local/bin/magma
+
+# we add the dummy device at boot
+RUN apt-get install -y iproute2
+
+
+# Install magma kernel
+RUN \
+  pip3 install git+https://github.com/edgarcosta/magma_kernel.git
+
+# Install gp/pari kernel
+RUN \
+  pip3 install git+https://github.com/edgarcosta/gp_kernel.git
 
 # Install R Jupyter Kernel package into R itself (so R kernel works), and some other packages e.g., rmarkdown which requires reticulate to use Python.
 RUN echo "install.packages(c('repr', 'IRdisplay', 'evaluate', 'crayon', 'pbdZMQ', 'httr', 'devtools', 'uuid', 'digest', 'IRkernel', 'formatR'), repos='https://cloud.r-project.org')" | sage -R --no-save
@@ -341,12 +384,27 @@ ARG COMMIT=HEAD
 # for installing these Python libraries (TODO: move to pypi?).
 RUN \
      umask 022 && git clone --depth=1 https://github.com/sagemathinc/cocalc.git \
-  && cd /cocalc && git pull && git fetch -u origin $BRANCH:$BRANCH && git checkout ${COMMIT:-HEAD}
+  && cd /cocalc && git pull && git fetch -u origin $BRANCH:$BRANCH && git checkout ${commit:-HEAD} \
+  && git apply /disable_smart_indent.patch
+
 
 RUN umask 022 && pip3 install --upgrade /cocalc/src/smc_pyutil/
 
 # Install code into Sage
 RUN umask 022 && sage -pip install --upgrade /cocalc/src/smc_sagews/
+
+# LMFDB dependencies
+RUN umask 022 \
+   && wget https://raw.githubusercontent.com/LMFDB/lmfdb/master/requirements.txt -O lmfdbreq.txt \
+   && sage -pip install --upgrade -r lmfdbreq.txt
+# pycontrolledreduction
+RUN umask 022 \
+   sage -pip install --upgrade git+https://github.com/edgarcosta/pycontrolledreduction.git@master#egg=pycontrolledreduction
+
+
+# Install pnpm package manager that we now use instead of npm
+RUN umask 022 \
+  && npm install -g pnpm
 
 # Build cocalc itself.
 RUN umask 022 \

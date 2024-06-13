@@ -123,6 +123,10 @@ def init_projects_path():
             os.makedirs(full_path)
             run("chmod og-rwx '%s'" % full_path)
 
+def add_dummy():
+    log("adding dummy interface")
+    run('ip link add dumdum type dummy')
+    run('ifconfig dumdum hw ether `/opt/magma/current/magma -d | grep "Valid MAC addresses" -A1 | tail -n1`')
 
 def start_ssh():
     log("start_ssh")
@@ -199,6 +203,7 @@ def init_log():
 
 
 def main():
+    add_dummy()
     init_log()
     init_projects_path()
     self_signed_cert()
