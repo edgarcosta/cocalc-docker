@@ -1,5 +1,5 @@
 cocalc-data=/scratch/cocalc-data
-common_options=--name=cocalc -p 443:443  -v $(cocalc-data)/projects:/projects  -v /opt/magma:/opt/magma:ro  -v /etc/letsencrypt/:/etc/letsencrypt/:ro --cap-add=NET_ADMIN -P cocalc
+common_options=--name=cocalc -p 443:443 --sysctl=net.ipv6.conf.all.disable_ipv6=1 -v $(cocalc-data)/projects:/projects  -v /opt/magma:/opt/magma:ro  -v /etc/letsencrypt/:/etc/letsencrypt/:ro --cap-add=NET_ADMIN -P cocalc
 build:
 	docker build -t cocalc .
 

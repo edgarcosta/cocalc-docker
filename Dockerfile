@@ -12,8 +12,6 @@ FROM sagemathinc/sagemath-core${ARCH}:${SAGEMATH_TAG} as sagemath
 
 FROM ubuntu:22.04
 
-MAINTAINER William Stein <wstein@sagemath.com>
-
 USER root
 
 # See https://github.com/sagemathinc/cocalc/issues/921
