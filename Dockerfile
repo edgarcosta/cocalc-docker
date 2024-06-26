@@ -390,11 +390,11 @@ ARG COMMIT=HEAD
 # Pull latest source code for CoCalc and checkout requested commit (or HEAD),
 # install our Python libraries globally, then remove cocalc.  We only need it
 # for installing these Python libraries (TODO: move to pypi?).
+COPY disable_smart_indent.patch /root/
 RUN \
-	ls / && \
      umask 022 && git clone --depth=1 https://github.com/sagemathinc/cocalc.git \
   && cd /cocalc && git pull && git fetch -u origin $BRANCH:$BRANCH && git checkout ${commit:-HEAD} \
-  && git apply /disable_smart_indent.patch
+  && git apply /root/disable_smart_indent.patch
 
 
 RUN umask 022 && pip3 install --upgrade /cocalc/src/smc_pyutil/
@@ -410,10 +410,6 @@ RUN umask 022 \
 RUN umask 022 \
    sage -pip install --upgrade git+https://github.com/edgarcosta/pycontrolledreduction.git@master#egg=pycontrolledreduction
 
-
-# Install pnpm package manager that we now use instead of npm
-RUN umask 022 \
-  && npm install -g pnpm
 
 # Build cocalc itself.
 RUN umask 022 \
