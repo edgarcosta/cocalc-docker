@@ -10,15 +10,16 @@ ARG SAGEMATH_TAG=
 ARG ARCH=
 FROM sagemathinc/sagemath-core${ARCH}:${SAGEMATH_TAG} as sagemath
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
+ARG NCPUS=24
 USER root
 
 # See https://github.com/sagemathinc/cocalc/issues/921
-ENV LC_ALL C.UTF-8
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
-ENV TERM screen
+ENV LC_ALL=C.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV TERM=screen
 
 
 # So we can source (see http://goo.gl/oBPi5G)
@@ -54,8 +55,7 @@ RUN \
        wget \
        curl \
        git \
-       python3 \
-       python2 \
+       python3-full \
        python3-pip \
        python3-pandas \
        make \
@@ -155,7 +155,17 @@ RUN \
    wget https://pari.math.u-bordeaux.fr/pub/pari/unix/pari.tgz \
    && tar xf pari.tgz \
    && cd pari-* \
-   && MAKE="make -j$(cat /proc/cpuinfo | grep processor | wc -l)" ./Configure --prefix=/usr/local && make install
+   && env MAKE="make -j${NCPUS}" ./Configure --prefix=/usr/local && make install
+
+# install the latest flint
+ARG FLINT=3.1.3-p1
+RUN \
+    wget https://github.com/flintlib/flint/releases/download/v${FLINT}/flint-${FLINT}.tar.xz \
+    && tar xf flint-${FLINT}.tar.xz \
+    && cd flint-${FLINT} \
+    && ./configure --prefix=/usr/local && make -j${NCPUS} && make install
+
+	
 
 # OLD
 # # Build and install Sage -- see https://github.com/sagemath/docker-images
@@ -182,12 +192,17 @@ RUN sage --nodotsage -c "install_scripts('/usr/bin')"
 # Install terminado for terminal support in the Jupyter Notebook
 RUN sage -pip install terminado
 
+
 # Install SageTex.
 RUN \
      cd /usr/local/sage/ \
-  && ./sage -p sagetex \
   && cp -rv /usr/local/sage/local/var/lib/sage/venv-python*/share/texmf/tex/latex/sagetex/ /usr/share/texmf/tex/latex/ \
   && texhash
+
+ENV VIRTUAL_ENV=/opt/venv
+ARG VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Try to install from pypi again to get better control over versions.
 # - ipywidgets<8 is because of https://github.com/sagemathinc/cocalc/issues/6128
@@ -195,19 +210,14 @@ RUN \
 RUN pip3 install pyyaml matplotlib jupyter jupyterlab "ipywidgets<8" "jupyter-client<7"
 
 # The python3 kernel that gets installed is broken, and we don't need it
-RUN rm -rf /usr/local/share/jupyter/kernels/python3
+RUN rm -rf $VIRTUAL_ENV/share/jupyter/kernels/python3
 
 # install the Octave kernel.
 # NOTE: we delete the spec file and use our own spec for the octave kernel, since the
 # one that comes with Ubuntu 20.04 crashes (it uses python instead of python3).
 RUN \
      pip3 install octave_kernel \
-  && rm -rf /usr/local/share/jupyter/kernels/octave
-
-# Pari/GP kernel support
-# This does build fine, but I'm not sure what it produces or where or how
-# to make it available.
-# RUN sage --pip install pari_jupyter
+  && rm -rf $VIRTUAL_ENV/share/jupyter/kernels/octave
 
 # Install all aspell dictionaries, so that spell check will work in all languages.  This is
 # used by cocalc's spell checkers (for editors).  This takes about 80MB, which is well worth it.
@@ -233,8 +243,8 @@ RUN echo '2+3' | julia
 # I figured out the directory /opt/julia/local/share/julia by inspecting the global varaible
 # DEPOT_PATH from within a running Julia session as a normal user, and also reading julia docs:
 #    https://pkgdocs.julialang.org/v1/glossary/
-RUN echo 'using Pkg; Pkg.add("IJulia");' | JUPYTER=/usr/local/bin/jupyter JULIA_DEPOT_PATH=/opt/julia/local/share/julia JULIA_PKG=/opt/julia/local/share/julia julia
-RUN mv "$HOME/.local/share/jupyter/kernels/julia"* "/usr/local/share/jupyter/kernels/"
+RUN echo 'using Pkg; Pkg.add("IJulia");' | JUPYTER=$VIRTUAL_ENV/bin/jupyter JULIA_DEPOT_PATH=/opt/julia/local/share/julia JULIA_PKG=/opt/julia/local/share/julia julia
+RUN mv "$HOME/.local/share/jupyter/kernels/julia"* "$VIRTUAL_ENV/share/jupyter/kernels/"
 
 # Also add Pluto and other VERY popular Julia packages system-wide.
 RUN echo 'using Pkg; Pkg.add("Pluto"); Pkg.add("Plots"); Pkg.add("Flux"); Pkg.add("Makie");' | JULIA_DEPOT_PATH=/opt/julia/local/share/julia JULIA_PKG=/opt/julia/local/share/julia julia
@@ -298,9 +308,9 @@ RUN echo -e "Package: *\nPin: release o=LP-PPA-mozillateam\nPin-Priority: 1001\n
 # so that's not an option.  Also, the chromium-browser package by default
 # in Ubuntu is just a tiny wrapper that says "use our snap".
 RUN \
-    add-apt-repository -y ppa:saiarcot895/chromium-beta \
- && apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt install -y chromium-browser
+    add-apt-repository -y ppa:xtradeb/apps \
+     && apt-get update \
+      && DEBIAN_FRONTEND=noninteractive apt install -y chromium
 
 # VSCode code-server web application
 # See https://github.com/cdr/code-server/releases for VERSION.
@@ -315,16 +325,16 @@ RUN \
 RUN echo "umask 077" >> /etc/bash.bashrc
 
 # Install some Jupyter kernel definitions
-COPY kernels /usr/local/share/jupyter/kernels
+COPY kernels ${VIRTUAL_ENV}/share/jupyter/kernels
 
-RUN  chmod -R a+r /usr/local/share/jupyter/kernels \
-  && chmod a+x /usr/local/share/jupyter/kernels/*
+RUN  chmod -R a+r ${VIRTUAL_ENV}/share/jupyter/kernels \
+  && chmod a+x ${VIRTUAL_ENV}/share/jupyter/kernels/*
 
 # Bash jupyter kernel
 RUN umask 022 && pip install bash_kernel && python3 -m bash_kernel.install
 
 # Configure so that R kernel actually works -- see https://github.com/IRkernel/IRkernel/issues/388
-COPY kernels/ir/Rprofile.site /usr/local/sage/local/lib/R/etc/Rprofile.site
+COPY kernels/ir/Rprofile.site ${VIRTUAL_ENV}/sage/local/lib/R/etc/Rprofile.site
 
 # Build a UTF-8 locale, so that tmux works -- see https://unix.stackexchange.com/questions/277909/updated-my-arch-linux-server-and-now-i-get-tmux-need-utf-8-locale-lc-ctype-bu
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
@@ -381,6 +391,7 @@ ARG COMMIT=HEAD
 # install our Python libraries globally, then remove cocalc.  We only need it
 # for installing these Python libraries (TODO: move to pypi?).
 RUN \
+	ls / && \
      umask 022 && git clone --depth=1 https://github.com/sagemathinc/cocalc.git \
   && cd /cocalc && git pull && git fetch -u origin $BRANCH:$BRANCH && git checkout ${commit:-HEAD} \
   && git apply /disable_smart_indent.patch
