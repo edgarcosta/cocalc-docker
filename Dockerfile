@@ -8,7 +8,7 @@
 
 ARG SAGEMATH_TAG=
 ARG ARCH=
-FROM sagemathinc/sagemath-core${ARCH}:${SAGEMATH_TAG} as sagemath
+FROM sagemathinc/sagemath-core${ARCH}:${SAGEMATH_TAG} AS sagemath
 
 FROM ubuntu:24.04
 
@@ -58,6 +58,7 @@ RUN \
        python3-full \
        python3-pip \
        python3-pandas \
+       python3-ipykernel \
        make \
        cmake \
        g++ \
@@ -157,13 +158,12 @@ RUN \
    && cd pari-* \
    && env MAKE="make -j${NCPUS}" ./Configure --prefix=/usr/local && make install
 
-# install the latest flint
-ARG FLINT=3.1.3-p1
-RUN \
-    wget https://github.com/flintlib/flint/releases/download/v${FLINT}/flint-${FLINT}.tar.xz \
-    && tar xf flint-${FLINT}.tar.xz \
-    && cd flint-${FLINT} \
-    && ./configure --prefix=/usr/local && make -j${NCPUS} && make install
+# ARG FLINT=3.1.3-p1
+# RUN \
+#     wget https://github.com/flintlib/flint/releases/download/v${FLINT}/flint-${FLINT}.tar.xz \
+#     && tar xf flint-${FLINT}.tar.xz \
+#     && cd flint-${FLINT} \
+#     && ./configure --prefix=/usr/local && make -j${NCPUS} && make install
 
 	
 
@@ -185,8 +185,13 @@ RUN /usr/local/sage/sage < /dev/null
 RUN  ln -sf "/usr/local/sage/sage" /usr/bin/sage \
   && ln -sf "/usr/local/sage/sage" /usr/bin/sagemath
 
-# Put scripts to start gap, gp, maxima, ... in /usr/bin
-RUN sage --nodotsage -c "install_scripts('/usr/bin')"
+# # Put scripts to start gap, gp, maxima, ... in /usr/bin
+# RUN sage --nodotsage -c "install_scripts('/usr/bin')"
+
+# Add links
+COPY src/scripts/links-to-sage.sh /root
+COPY src/scripts/install_scripts.py /root
+RUN chmod +x  /root/links-to-sage.sh && cd /root && ./links-to-sage.sh && rm links-to-sage.sh install_scripts.py
 
 # Install additional Python packages into the sage Python distribution...
 # Install terminado for terminal support in the Jupyter Notebook
@@ -361,7 +366,10 @@ RUN ln -sf /usr/bin/yapf3 /usr/bin/yapf
 # Other pip3 packages
 # NOTE: Upgrading zmq is very important, or the Ubuntu version breaks everything..
 RUN \
-  pip3 install --upgrade --no-cache-dir  pandas plotly scipy  scikit-learn seaborn bokeh zmq k3d nose
+  pip3 install --upgrade --no-cache-dir pip pandas plotly scipy  scikit-learn seaborn bokeh zmq k3d nose torch tensorflow
+
+RUN \
+  sage -pip install --upgrade --no-cache-dir pip pandas plotly scipy  scikit-learn seaborn bokeh zmq k3d nose torch tensorflow
 
 # Install node v18.17.1
 # CRITICAL:  Do *NOT* upgrade nodejs to a newer version until the following is fixed !!!!!!
@@ -409,6 +417,7 @@ RUN umask 022 \
 # pycontrolledreduction
 RUN umask 022 \
    sage -pip install --upgrade git+https://github.com/edgarcosta/pycontrolledreduction.git@master#egg=pycontrolledreduction
+
 
 
 # Build cocalc itself.

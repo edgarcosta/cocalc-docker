@@ -1,5 +1,5 @@
 COCALC_DATA=/scratch/cocalc-data
-COMMON_OPTIONS=--name=cocalc-docker -p 443:443 --sysctl=net.ipv6.conf.all.disable_ipv6=1 -v $(cocalc-data)/projects:/projects  -v /opt/magma:/opt/magma:ro  -v /etc/letsencrypt/:/etc/letsencrypt/:ro --cap-add=NET_ADMIN -P
+COMMON_OPTIONS=-e COCALC_NO_IDLE_TIMEOUT=yes --name=cocalc-docker -p 443:443 --sysctl=net.ipv6.conf.all.disable_ipv6=1 -v /mnt/disks/mathml-data/data/:/data:ro -v $(COCALC_DATA)/projects:/projects  -v /opt/magma:/opt/magma:ro  -v /etc/letsencrypt/:/etc/letsencrypt/:ro --cap-add=NET_ADMIN -P
 DOCKER_USER=edgarcosta
 BRANCH=master
 BUILD_DATE=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -11,7 +11,7 @@ ARCH=$(shell uname -m | sed 's/x86_64/-x86_64/;s/arm64/-arm64/;s/aarch64/-arm64/
 # Update this for each new cocalc-docker release; it's a totally arbitrary version number.
 TAG=1.5
 
-SAGEMATH_TAG=10.3
+SAGEMATH_TAG=10.4
 cocalc-docker:
 	docker build \
 		--build-arg SAGEMATH_TAG=$(SAGEMATH_TAG) \
@@ -58,8 +58,14 @@ push-pytorch:
 	docker push $(DOCKER_USER)/cocalc-docker-pytorch:$(TAG)
 
 ssl:
-	mkdir -p $(cocalc-data)
-	if [ -e $(cocalc-data)/projects/conf/cert/cert.pem ]; then rm $(cocalc-data)/projects/conf/cert/cert.pem; fi
-	if [ -e $(cocalc-data)/projects/conf/cert/key.pem ]; then rm $(cocalc-data)/projects/conf/cert/key.pem; fi
-	ln -s /etc/letsencrypt/live/chatelet.mit.edu/cert.pem $(cocalc-data)/projects/conf/cert/cert.pem
-	ln -s /etc/letsencrypt/live/chatelet.mit.edu/privkey.pem $(cocalc-data)/projects/conf/cert/key.pem
+	mkdir -p $(COCALC_DATA)/projects/conf/cert/
+	if [ -e $(COCALC_DATA)/projects/conf/cert/cert.pem ]; then rm $(COCALC_DATA)/projects/conf/cert/cert.pem; fi
+	if [ -e $(COCALC_DATA)/projects/conf/cert/key.pem ]; then rm $(COCALC_DATA)/projects/conf/cert/key.pem; fi
+	ln -s /etc/letsencrypt/live/mathml2024.org/cert.pem $(COCALC_DATA)/projects/conf/cert/cert.pem
+	ln -s /etc/letsencrypt/live/mathml2024.org/privkey.pem $(COCALC_DATA)/projects/conf/cert/key.pem
+
+################################################################################
+# makefile debugging
+# ################################################################################
+print-%:
+	@echo "$*=$($*)"
