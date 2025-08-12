@@ -28,6 +28,7 @@ RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 # Ubuntu software that are used by CoCalc (latex, pandoc, sage)
 RUN \
      apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y\
   && DEBIAN_FRONTEND=noninteractive apt-get install -y \
        software-properties-common \
        texlive \

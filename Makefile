@@ -9,7 +9,7 @@ COMMIT=$(shell git ls-remote -h https://github.com/sagemathinc/cocalc $(BRANCH) 
 ARCH=$(shell uname -m | sed 's/x86_64/-x86_64/;s/arm64/-arm64/;s/aarch64/-arm64/')
 
 # Update this for each new cocalc-docker release; it's a totally arbitrary version number.
-TAG=1.5
+TAG=1.6
 
 SAGEMATH_TAG=10.3
 cocalc-docker:
