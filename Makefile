@@ -1,17 +1,25 @@
-COCALC_DATA=/scratch/cocalc-data
-COMMON_OPTIONS=-e COCALC_NO_IDLE_TIMEOUT=yes --name=cocalc-docker -p 443:443 --sysctl=net.ipv6.conf.all.disable_ipv6=1 -v /mnt/disks/mathml-data/data/:/data:ro -v $(COCALC_DATA)/projects:/projects  -v /opt/magma:/opt/magma:ro  -v /etc/letsencrypt/:/etc/letsencrypt/:ro --cap-add=NET_ADMIN -P
+COCALC_DATA=/mnt/cocalc-data
+COMMON_OPTIONS=--restart unless-stopped  --name=cocalc-docker --network no-inet -p 18.18.21.18:443:443 -p 18.18.21.18:80:80 --sysctl=net.ipv6.conf.all.disable_ipv6=1 -v $(COCALC_DATA)/projects:/projects  -v /opt/magma:/opt/magma:ro  -v /etc/letsencrypt/:/etc/letsencrypt/:ro --cap-add=NET_ADMIN -P
 DOCKER_USER=edgarcosta
 BRANCH=master
 BUILD_DATE=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 COMMIT=$(shell git ls-remote -h https://github.com/sagemathinc/cocalc $(BRANCH) | awk '{print $$1}')
+COMMIT=f695624960 # Jan 11
+#COMMIT=6e7d8fba49 # April 11
+COMMIT=33fc0235b3 # Dec 25
+COMMIT=c1c56ddbf00149079e729c155bd8af3e4e27872e # Dec 19
+COMMIT=d26ab245e42d61cf7c3f332b264b5f87d1bde9ec # Nov 6
+COMMIT=dce81ac # Nov 26
+COMMIT=0ca12f9 # Dec 19
+#COMMIT=a51c0315e4b4d85187643b735c221c90e60d7899 # Jun 24
 
 # ARCH = '-x86_64' or '-arm64'
 ARCH=$(shell uname -m | sed 's/x86_64/-x86_64/;s/arm64/-arm64/;s/aarch64/-arm64/')
 
 # Update this for each new cocalc-docker release; it's a totally arbitrary version number.
-TAG=1.5
+TAG=dec19
 
-SAGEMATH_TAG=10.4
+SAGEMATH_TAG=10.5
 cocalc-docker:
 	docker build \
 		--build-arg SAGEMATH_TAG=$(SAGEMATH_TAG) \
@@ -61,8 +69,8 @@ ssl:
 	mkdir -p $(COCALC_DATA)/projects/conf/cert/
 	if [ -e $(COCALC_DATA)/projects/conf/cert/cert.pem ]; then rm $(COCALC_DATA)/projects/conf/cert/cert.pem; fi
 	if [ -e $(COCALC_DATA)/projects/conf/cert/key.pem ]; then rm $(COCALC_DATA)/projects/conf/cert/key.pem; fi
-	ln -s /etc/letsencrypt/live/mathml2024.org/cert.pem $(COCALC_DATA)/projects/conf/cert/cert.pem
-	ln -s /etc/letsencrypt/live/mathml2024.org/privkey.pem $(COCALC_DATA)/projects/conf/cert/key.pem
+	ln -s /etc/letsencrypt/live/diophantus.mit.edu/cert.pem $(COCALC_DATA)/projects/conf/cert/cert.pem
+	ln -s /etc/letsencrypt/live/diophantus.mit.edu/privkey.pem $(COCALC_DATA)/projects/conf/cert/key.pem
 
 ################################################################################
 # makefile debugging

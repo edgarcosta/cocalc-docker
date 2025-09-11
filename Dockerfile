@@ -4,7 +4,7 @@
 # the R statistical software, SageMath (copying from another Docker build), and
 # the Julia programming language. Finally, it installs
 # various Jupyter kernels, including ones for Python, Octave, and JavaScript. The
-# image is built on top of the Ubuntu 22.04 operating system.
+# image is built on top of the Ubuntu 24.04 operating system.
 
 ARG SAGEMATH_TAG=
 ARG ARCH=
@@ -20,6 +20,11 @@ ENV LC_ALL=C.UTF-8
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
 ENV TERM=screen
+# Parallel compilation settings
+ARG NODE_OPTIONS_PARALLEL="--max-old-space-size=8192"
+ENV MAKE_JOBS="$NCPUS"
+ENV NODE_OPTIONS="$NODE_OPTIONS_PARALLEL"
+
 
 
 # So we can source (see http://goo.gl/oBPi5G)
@@ -27,7 +32,7 @@ RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 
 # Ubuntu software that are used by CoCalc (latex, pandoc, sage)
 RUN \
-     apt-get update \
+     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y\
   && DEBIAN_FRONTEND=noninteractive apt-get install -y \
        software-properties-common \
        texlive \
@@ -37,11 +42,7 @@ RUN \
        texlive-luatex \
        texlive-bibtex-extra \
        texlive-science \
-       liblog-log4perl-perl
-
-RUN \
-    apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+       liblog-log4perl-perl \
        tmux \
        flex \
        bison \
@@ -75,7 +76,14 @@ RUN \
        libmpfr-dev \
        libxml2-dev \
        libxslt-dev \
-       libfuse-dev
+       libfuse-dev \
+       libmpfr6 \
+       libflint18t64 libflint-dev
+
+ENV VIRTUAL_ENV=/opt/venv
+ARG VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
  RUN \
      apt-get update \
@@ -96,11 +104,7 @@ RUN \
        libpq-dev \
        build-essential \
        automake \
-       jq
-
-RUN \
-   apt-get update \
-&& DEBIAN_FRONTEND=noninteractive apt-get install -y \
+       jq \
        cmake \
        gfortran \
        dpkg-dev \
@@ -158,20 +162,6 @@ RUN \
    && cd pari-* \
    && env MAKE="make -j${NCPUS}" ./Configure --prefix=/usr/local && make install
 
-# ARG FLINT=3.1.3-p1
-# RUN \
-#     wget https://github.com/flintlib/flint/releases/download/v${FLINT}/flint-${FLINT}.tar.xz \
-#     && tar xf flint-${FLINT}.tar.xz \
-#     && cd flint-${FLINT} \
-#     && ./configure --prefix=/usr/local && make -j${NCPUS} && make install
-
-	
-
-# OLD
-# # Build and install Sage -- see https://github.com/sagemath/docker-images
-# COPY scripts/ /usr/sage-install-scripts/
-# RUN chmod -R a+rx /usr/sage-install-scripts/
-# NEW
 # I'm now pre-building sage for each version once and for all via
 #    https://github.com/sagemathinc/cocalc-compute-docker
 # NOTE: this copies from a multi-platform image, so it properly works
@@ -185,10 +175,7 @@ RUN /usr/local/sage/sage < /dev/null
 RUN  ln -sf "/usr/local/sage/sage" /usr/bin/sage \
   && ln -sf "/usr/local/sage/sage" /usr/bin/sagemath
 
-# # Put scripts to start gap, gp, maxima, ... in /usr/bin
-# RUN sage --nodotsage -c "install_scripts('/usr/bin')"
-
-# Add links
+# Put scripts to start gap, gp, maxima, ... in /usr/bin
 COPY src/scripts/links-to-sage.sh /root
 COPY src/scripts/install_scripts.py /root
 RUN chmod +x  /root/links-to-sage.sh && cd /root && ./links-to-sage.sh && rm links-to-sage.sh install_scripts.py
@@ -197,32 +184,27 @@ RUN chmod +x  /root/links-to-sage.sh && cd /root && ./links-to-sage.sh && rm lin
 # Install terminado for terminal support in the Jupyter Notebook
 RUN sage -pip install terminado
 
-
 # Install SageTex.
 RUN \
      cd /usr/local/sage/ \
+  && ./sage -p sagetex \
   && cp -rv /usr/local/sage/local/var/lib/sage/venv-python*/share/texmf/tex/latex/sagetex/ /usr/share/texmf/tex/latex/ \
   && texhash
-
-ENV VIRTUAL_ENV=/opt/venv
-ARG VIRTUAL_ENV=/opt/venv
-RUN python3 -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Try to install from pypi again to get better control over versions.
 # - ipywidgets<8 is because of https://github.com/sagemathinc/cocalc/issues/6128
 # - jupyter-client<7 is because of https://github.com/sagemathinc/cocalc/issues/5715
-RUN pip3 install pyyaml matplotlib jupyter jupyterlab "ipywidgets<8" "jupyter-client<7"
+RUN pip3 install pyyaml matplotlib jupyter jupyterlab ipywidgets "jupyter-client<7" snakeviz
 
 # The python3 kernel that gets installed is broken, and we don't need it
-RUN rm -rf $VIRTUAL_ENV/share/jupyter/kernels/python3
+RUN rm -rf /usr/local/share/jupyter/kernels/python3
 
 # install the Octave kernel.
 # NOTE: we delete the spec file and use our own spec for the octave kernel, since the
 # one that comes with Ubuntu 20.04 crashes (it uses python instead of python3).
 RUN \
      pip3 install octave_kernel \
-  && rm -rf $VIRTUAL_ENV/share/jupyter/kernels/octave
+     && rm -rf /usr/local/share/jupyter/kernels/octave
 
 # Install all aspell dictionaries, so that spell check will work in all languages.  This is
 # used by cocalc's spell checkers (for editors).  This takes about 80MB, which is well worth it.
@@ -320,11 +302,12 @@ RUN \
 # VSCode code-server web application
 # See https://github.com/cdr/code-server/releases for VERSION.
 RUN \
-     export VERSION=4.19.0 \
+     export VERSION=4.99.3 \
   && export ARCH=`uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/` \
   && curl -fOL https://github.com/cdr/code-server/releases/download/v$VERSION/code-server_"$VERSION"_"$ARCH".deb \
   && dpkg -i code-server_"$VERSION"_"$ARCH".deb \
   && rm code-server_"$VERSION"_"$ARCH".deb
+
 
 
 RUN echo "umask 077" >> /etc/bash.bashrc
@@ -339,7 +322,7 @@ RUN  chmod -R a+r ${VIRTUAL_ENV}/share/jupyter/kernels \
 RUN umask 022 && pip install bash_kernel && python3 -m bash_kernel.install
 
 # Configure so that R kernel actually works -- see https://github.com/IRkernel/IRkernel/issues/388
-COPY kernels/ir/Rprofile.site ${VIRTUAL_ENV}/sage/local/lib/R/etc/Rprofile.site
+COPY kernels/ir/Rprofile.site /usr/local/sage/local/lib/R/etc/Rprofile.site
 
 # Build a UTF-8 locale, so that tmux works -- see https://unix.stackexchange.com/questions/277909/updated-my-arch-linux-server-and-now-i-get-tmux-need-utf-8-locale-lc-ctype-bu
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
@@ -371,10 +354,17 @@ RUN \
 RUN \
   sage -pip install --upgrade --no-cache-dir pip pandas plotly scipy  scikit-learn seaborn bokeh zmq k3d nose torch tensorflow
 
+
+
+# BUILDING COCALC
+
+
+
 # Install node v18.17.1
 # CRITICAL:  Do *NOT* upgrade nodejs to a newer version until the following is fixed !!!!!!
 #    https://github.com/sagemathinc/cocalc/issues/6963
 ARG NODE_VERSION=18.17.1
+# Build optimization arguments
 # See https://github.com/nvm-sh/nvm#install--update-script for nvm versions
 ARG NVM_VERSION=0.39.5
 RUN  mkdir -p /usr/local/nvm \
@@ -382,8 +372,8 @@ RUN  mkdir -p /usr/local/nvm \
   && source /usr/local/nvm/nvm.sh \
   && nvm install --no-progress $NODE_VERSION \
   && rm -rf /usr/local/nvm/.git/ \
-  && npm install -g npm pnpm \
-  && echo "source /usr/local/nvm/nvm.sh" >> /etc/bash.bashrc
+  && npm install -g npm@10.7.0 pnpm@9.4.0 \
+  && echo "source /usr/local/nvm/nvm.sh" >> /etc/bash.bashrc \
 
 # Kernel for javascript (the node.js Jupyter kernel)
 RUN \
@@ -395,20 +385,33 @@ RUN \
 ARG BRANCH=master
 ARG COMMIT=HEAD
 
-# Pull latest source code for CoCalc and checkout requested commit (or HEAD),
-# install our Python libraries globally, then remove cocalc.  We only need it
-# for installing these Python libraries (TODO: move to pypi?).
+# Pull latest source code for CoCalc and checkout requested commit (or HEAD)
+RUN umask 022 && git clone https://github.com/sagemathinc/cocalc.git
+RUN umask 022 && cd /cocalc && git pull && git fetch -u origin $BRANCH:$BRANCH && git checkout ${COMMIT:-HEAD}
+# Disable smart indent for the editor.
 COPY disable_smart_indent.patch /root/
-RUN \
-     umask 022 && git clone --depth=1 https://github.com/sagemathinc/cocalc.git \
-  && cd /cocalc && git pull && git fetch -u origin $BRANCH:$BRANCH && git checkout ${commit:-HEAD} \
-  && git apply /root/disable_smart_indent.patch
+RUN cd /cocalc && git apply /root/disable_smart_indent.patch
+
+
+
 
 
 RUN umask 022 && pip3 install --upgrade /cocalc/src/smc_pyutil/
 
 # Install code into Sage
 RUN umask 022 && sage -pip install --upgrade /cocalc/src/smc_sagews/
+
+
+# Build cocalc itself.
+RUN umask 022 \
+  && cd /cocalc/src \
+  && source /usr/local/nvm/nvm.sh \
+  && pnpm run make
+
+# And cleanup pnpm cache
+RUN source /usr/local/nvm/nvm.sh && pnpm store prune
+
+
 
 # LMFDB dependencies
 RUN umask 022 \
@@ -418,22 +421,12 @@ RUN umask 022 \
 RUN umask 022 \
    sage -pip install --upgrade git+https://github.com/edgarcosta/pycontrolledreduction.git@master#egg=pycontrolledreduction
 
-
-
-# Build cocalc itself.
-RUN umask 022 \
-  && cd /cocalc/src \
-  && source /usr/local/nvm/nvm.sh \
-  && npm run make
-
-# And cleanup pnpm cache
-RUN source /usr/local/nvm/nvm.sh && pnpm store prune
-
 # Configuration
 COPY login.defs /etc/login.defs
 COPY login /etc/defaults/login
 COPY run.py /root/run.py
 COPY bashrc /root/.bashrc
+
 
 CMD /root/run.py
 

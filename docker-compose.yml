@@ -1,0 +1,37 @@
+services:
+  cocalc:
+    container_name: cocalc-docker
+    image: edgarcosta/cocalc-docker-x86_64:dec19
+    restart: unless-stopped
+
+    # If you originally overrode the command, uncomment and set:
+    # command: ["/bin/sh", "-c", "/root/run..."]
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - /mnt/cocalc-data/projects:/projects
+      - /opt/magma:/opt/magma:ro
+      - /etc/letsencrypt/:/etc/letsencrypt/:ro
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+
+    networks:
+      no_egress:
+        ipv4_address: 172.30.0.10   # optional, but nice for stability
+
+networks:
+  no_egress:
+    driver: bridge
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.30.0.0/16     # pick a free RFC1918 range
+    # internal: true
